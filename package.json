@@ -1,0 +1,41 @@
+{
+  "name": "rira-21",
+  "version": "1.1.0",
+  "description": "Sistema de Comunicação Interna para Consultórios",
+  "main": "src/backend/server.js",
+  "scripts": {
+    "start": "node src/backend/server.js",
+    "dev": "nodemon src/backend/server.js",
+    "test": "node tests/integration/test-all.js",
+    "test:tv": "node tests/integration/test-tv-log.js",
+    "test:painel": "node tests/integration/test-painel.js",
+    "clean": "node scripts/clean.js",
+    "minify": "node scripts/minify.js",
+    "build": "npm run clean && npm run minify && mkdir -p dist/backend && cp src/backend/production-server.js dist/backend/",
+    "build:prod": "npm run build && npm ci --omit=dev",
+    "start:prod": "node dist/backend/production-server.js",
+    "start:prod:safe": "./scripts/start-prod.sh",
+    "check": "find . -type d -exec du -sh {} \\; | sort -hr | head -10"
+  },
+  "dependencies": {
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "express-rate-limit": "^7.5.0",
+    "helmet": "^8.1.0",
+    "hpp": "^0.2.3",
+    "sanitize": "^2.1.2",
+    "socket.io": "^4.7.2",
+    "xss-clean": "^0.1.4"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.9",
+    "socket.io-client": "^4.7.2"
+  },
+  "engines": {
+    "node": ">=14.0.0",
+    "npm": ">=6.0.0"
+  },
+  "author": "RIRA 21 Team",
+  "license": "MIT"
+}

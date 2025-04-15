@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Canal Interno - TV</title>
+  <!-- Configurações de segurança -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.socket.io https://cdn.tailwindcss.com https://cdn.jsdelivr.net 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; img-src 'self' data: https:; media-src 'self' https:; connect-src 'self' ws: wss: http: https:;">
+  <meta http-equiv="X-Content-Type-Options" content="nosniff">
+  <meta http-equiv="X-Frame-Options" content="SAMEORIGIN">
+  <meta http-equiv="Permissions-Policy" content="camera=(), microphone=(), geolocation=()">
+  <script src="https://cdn.socket.io/4.6.1/socket.io.min.js" integrity="sha384-uXjRYVAKnf0Gw1OL4Dd8h99kbal1soQkh+TMOVQovesDJf7sByFGaXwyuHSP2JY" crossorigin="anonymous"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js" integrity="sha384-cB2I2/MU/JVIz3JQYYdIFjmOGnYPx7ei/EGz+LHKkC0qgCLQRUuV1xUYjlGCkbQ/" crossorigin="anonymous"></script>
+  <style>
+    .slide {
+      display: none;
+      opacity: 0;
+      transition: opacity 1s ease;
+    }
+    .slide.active {
+      display: block;
+      opacity: 1;
+    }
+    .alert-overlay {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: #ff0000dd;
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 3rem;
+      z-index: 9999;
+      text-align: center;
+      padding: 2rem;
+      display: none;
+    }
+    .media-container {
+      width: 100%;
+      height: 70vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    .media-container img, .media-container video {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+    }
+    .agenda-item {
+      margin: 1rem 0;
+      padding: 0.5rem;
+      border-left: 4px solid #3b82f6;
+      text-align: left;
+    }
+    .qrcode-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin: 1rem 0;
+    }
+    .poll-container {
+      margin: 1rem 0;
+      padding: 1rem;
+      background: rgba(255,255,255,0.1);
+      border-radius: 0.5rem;
+    }
+    .poll-option {
+      display: flex;
+      justify-content: space-between;
+      margin: 0.5rem 0;
+    }
+    .poll-bar {
+      height: 1.5rem;
+      background: #3b82f6;
+      border-radius: 0.25rem;
+    }
+  </style>
+</head>
+<body class="bg-black text-white text-center text-4xl p-6 font-sans">
+  <div id="carrossel">
+    <div class="slide active" id="slide1">
+      <div id="clock">--:--:--</div>
+      <div id="weather">Temperatura: --°C</div>
+    </div>
+    <div class="slide" id="slide2">
+      <div id="tasks">Sem tarefas</div>
+    </div>
+    <div class="slide" id="slide3">
+      <div>Aviso geral da clínica</div>
+    </div>
+    <div class="slide" id="slide4">
+      <div>Slide institucional</div>
+    </div>
+    <!-- Novo slide para mídia -->
+    <div class="slide" id="slide5">
+      <h2 class="mb-4">Mídia em Destaque</h2>
+      <div class="media-container" id="mediaContainer">
+        <!-- O conteúdo será injetado via JavaScript -->
+      </div>
+    </div>
+    <!-- Novo slide para agenda -->
+    <div class="slide" id="slide6">
+      <h2 class="mb-4">Agenda do Dia</h2>
+      <div id="agendaContainer" class="text-2xl">
+        <!-- Itens da agenda serão injetados aqui -->
+      </div>
+    </div>
+    <!-- Novo slide para QR code -->
+    <div class="slide" id="slide7">
+      <h2 class="mb-4">Acesse Mais Informações</h2>
+      <div class="qrcode-container">
+        <div id="qrcodeCanvas"></div>
+        <p id="qrcodeText" class="mt-4 text-2xl">Escaneie o código QR</p>
+      </div>
+    </div>
+    <!-- Novo slide para enquetes -->
+    <div class="slide" id="slide8">
+      <h2 class="mb-4">Enquete Atual</h2>
+      <div id="pollContainer" class="poll-container text-2xl">
+        <!-- Conteúdo da enquete será injetado aqui -->
+      </div>
+    </div>
+  </div>
+
+  <div class="alert-overlay" id="alertOverlay"></div>
+  <audio id="alertSound" src=""></audio>
+
+  <script>
+    // Configurações e estado da aplicação
+    const appConfig = {
+      defaultDuration: 10000,
+      maxUrlLength: 2048,
+      validMediaTypes: ['image', 'video'],
+      validSoundTypes: ['default', 'emergency', 'notification', 'reminder'],
+      allowedOrigins: [window.location.origin, 'http://localhost:3001']
+    };
+
+    // Contexto de áudio para reprodução de som que precisa de interação do usuário
+    let audioContext = null;
+    
+    function initAudioContext() {
+      try {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        console.log("Contexto de áudio inicializado:", audioContext.state);
+        return audioContext;
+      } catch (e) {
+        console.error("Erro ao inicializar contexto de áudio:", e);
+        return null;
+      }
+    }
+    
+    // Ativar áudio na primeira interação do usuário
+    document.addEventListener('click', function activateAudio() {
+      if (!audioContext) {
+        audioContext = initAudioContext();
+      }
+      
+      if (audioContext && audioContext.state === 'suspended') {
+        audioContext.resume().then(() => {
+          console.log("Áudio ativado pelo usuário");
+        }).catch(err => {
+          console.log("Falha ao ativar áudio:", err);
+        });
+      }
+      
+      document.removeEventListener('click', activateAudio);
+    }, {once: false});
+
+    // Detecta automaticamente o endereço do servidor com validação
+    const socketURL = (() => {
+      const hostname = window.location.hostname;
+      if (hostname === 'localhost' || hostname === '127.0.0.1') {
+        return 'http://localhost:3001';
+      } else {
+        // Garantir que estamos na mesma origem
+        return window.location.origin;
+      }
+    })();
+    
+    // Configurações mais seguras para o socket.io
+    const socketOptions = {
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
+      timeout: 20000,
+      transports: ['websocket', 'polling']
+    };
+    
+    let socket;
+    
+    try {
+      socket = io(socketURL, socketOptions);
+      
+      // Tratamento de erros de conexão
+      socket.on('connect_error', (err) => {
+        console.error('Erro de conexão:', err);
+        showNetworkError('Falha na conexão com o servidor');
+      });
+      
+      socket.on('connect', () => {
+        console.log('Conectado ao servidor com ID:', socket.id);
+        // Apenas registrar após conectar com sucesso
+        socket.emit("register", { type: "tv", id: "admin" });
+      });
+      
+      // Obter confirmação de registro
+      socket.on("registered", (data) => {
+        console.log("Registro confirmado:", data);
+      });
+    } catch (e) {
+      console.error("Erro fatal na inicialização do socket:", e);
+      showNetworkError('Erro ao inicializar conexão');
+    }
+
+    // Função para exibir erro de rede
+    function showNetworkError(message) {
+      const overlay = document.getElementById("alertOverlay");
+      overlay.innerText = `ERRO DE CONEXÃO: ${message}`;
+      overlay.style.display = "flex";
+      overlay.style.backgroundColor = "#660000";
+      
+      setTimeout(() => {
+        overlay.style.backgroundColor = "#ff0000dd";
+        overlay.style.display = "none";
+      }, 5000);
+    }
+
+    // Objeto para armazenar diferentes sons de alerta com caminhos seguros
+    const alertSounds = {
+      emergency: "/assets/sounds/emergency.mp3",
+      notification: "/assets/sounds/notification.ogg",
+      reminder: "/assets/sounds/reminder.ogg",
+      default: "/assets/sounds/default.ogg"
+    };
+
+    // Função segura para verificar se um arquivo existe
+    function checkFileExists(url) {
+      return new Promise((resolve) => {
+        // Validar URL
+        if (!url || url.length > appConfig.maxUrlLength || !url.startsWith('/')) {
+          console.error("URL inválida:", url);
+          resolve(false);
+          return;
+        }
+        
+        const http = new XMLHttpRequest();
+        http.onreadystatechange = function() {
+          if (http.readyState === 4) {
+            resolve(http.status === 200);
+          }
+        };
+        
+        http.onerror = function() {
+          console.error("Erro ao verificar arquivo:", url);
+          resolve(false);
+        };
+        
+        try {
+          http.open('HEAD', url, true);
+          http.timeout = 5000; // 5 segundos de timeout
+          http.send();
+        } catch (e) {
+          console.error("Exceção ao verificar arquivo:", e);
+          resolve(false);
+        }
+      });
+    }
+
+    // Configurações de notificações programadas
+    let scheduledNotifications = [];
+
+    // Lidar com mensagens recebidas com validação
+    socket.on("message", data => {
+      try {
+        // Validação básica
+        if (!data || typeof data !== 'object' || !data.type) {
+          console.error("Mensagem inválida recebida:", data);
+          return;
+        }
+        
+        console.log("Mensagem recebida:", data);
+        
+        // Validação por tipo de mensagem
+        switch(data.type) {
+          case "alert":
+            if (typeof data.message === 'string') {
+              const sanitizedMessage = sanitizeInput(data.message, 200);
+              const soundType = validateSoundType(data.sound || data.soundType);
+              const duration = validateDuration(data.duration);
+              showAlert(sanitizedMessage, soundType, duration);
+            }
+            break;
+            
+          case "tasks":
+            if (Array.isArray(data.tasks)) {
+              const sanitizedTasks = data.tasks
+                .filter(task => typeof task === 'string')
+                .map(task => sanitizeInput(task, 100));
+              document.getElementById("tasks").innerText = sanitizedTasks.join("\n");
+            }
+            break;
+            
+          case "media":
+            if (typeof data.mediaUrl === 'string' && appConfig.validMediaTypes.includes(data.mediaType)) {
+              updateMedia(
+                validateUrl(data.mediaUrl),
+                data.mediaType,
+                sanitizeInput(data.mediaCaption || '', 100)
+              );
+            }
+            break;
+            
+          case "agenda":
+            if (Array.isArray(data.events)) {
+              const validEvents = data.events.filter(event => 
+                event && typeof event.time === 'string' && 
+                typeof event.title === 'string'
+              ).map(event => ({
+                time: sanitizeInput(event.time, 10),
+                title: sanitizeInput(event.title, 50),
+                description: sanitizeInput(event.description || '', 200)
+              }));
+              updateAgenda(validEvents);
+            }
+            break;
+            
+          case "qrcode":
+            if (typeof data.url === 'string') {
+              updateQRCode(
+                validateUrl(data.url), 
+                sanitizeInput(data.text || '', 100)
+              );
+            }
+            break;
+            
+          case "poll":
+            if (typeof data.question === 'string' && Array.isArray(data.options)) {
+              const validOptions = data.options.filter(option => 
+                option && typeof option.text === 'string'
+              ).map(option => ({
+                text: sanitizeInput(option.text, 50),
+                votes: validateNumber(option.votes, 0, 999999)
+              }));
+              
+              if (validOptions.length >= 2) {
+                updatePoll(sanitizeInput(data.question, 200), validOptions);
+              }
+            }
+            break;
+            
+          case "scheduledNotification":
+            if (typeof data.message === 'string' && typeof data.scheduledTime === 'string') {
+              scheduleNotification({
+                message: sanitizeInput(data.message, 200),
+                soundType: validateSoundType(data.soundType),
+                scheduledTime: data.scheduledTime,
+                duration: validateDuration(data.duration)
+              });
+            }
+            break;
+            
+          default:
+            console.warn("Tipo de mensagem desconhecido:", data.type);
+        }
+      } catch (e) {
+        console.error("Erro ao processar mensagem:", e);
+      }
+    });
+
+    // Função para sanitizar input para evitar XSS
+    function sanitizeInput(input, maxLength) {
+      if (typeof input !== 'string') return '';
+      
+      // Limitar tamanho
+      input = input.substring(0, maxLength || 100);
+      
+      // Remover tags HTML e scripts
+      return input
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;')
+        .replace(/`/g, '&#96;');
+    }
+    
+    // Função para validar tipos de som
+    function validateSoundType(type) {
+      return appConfig.validSoundTypes.includes(type) ? type : 'default';
+    }
+    
+    // Função para validar duração
+    function validateDuration(duration) {
+      return validateNumber(duration, 1000, 60000);
+    }
+    
+    // Função para validar números
+    function validateNumber(value, min, max) {
+      const num = parseInt(value);
+      if (isNaN(num)) return min;
+      return Math.max(min, Math.min(max, num));
+    }
+    
+    // Função para validar URLs
+    function validateUrl(url) {
+      if (typeof url !== 'string') return '';
+      if (url.length > appConfig.maxUrlLength) return '';
+      
+      // Aceitar apenas URLs HTTP/HTTPS
+      if (!/^https?:\/\//i.test(url)) {
+        return '';
+      }
+      
+      // Sanitizar
+      return url
+        .replace(/[^\w\s:\/\-\.\?\=\&\%]/gi, '')
+        .substring(0, appConfig.maxUrlLength);
+    }
+
+    // Função para exibir alerta com som personalizado (com segurança adicional)
+    async function showAlert(message, soundType, duration) {
+      const overlay = document.getElementById("alertOverlay");
+      overlay.innerText = message;
+      
+      // Seleciona o som com base no tipo (validado)
+      const soundSrc = alertSounds[soundType] || '';
+      
+      if (soundSrc) {
+        const soundExists = await checkFileExists(soundSrc);
+        if (soundExists) {
+          try {
+            const alertSound = document.getElementById("alertSound");
+            alertSound.src = soundSrc;
+            
+            // Tentar reproduzir com fallback para audioContext
+            try {
+              const playPromise = alertSound.play();
+              
+              if (playPromise !== undefined) {
+                playPromise.catch(error => {
+                  console.log("Erro ao reproduzir som:", error);
+                  playWithAudioContext(soundSrc);
+                });
+              }
+            } catch (error) {
+              console.error("Erro ao reproduzir som:", error);
+              playWithAudioContext(soundSrc);
+            }
+          } catch (error) {
+            console.error("Erro ao reproduzir som:", error);
+          }
+        }
+      }
+      
+      overlay.style.display = "flex";
+      setTimeout(() => {
+        overlay.style.display = "none";
+      }, duration);
+    }
+    
+    // Função para tocar som usando AudioContext como backup
+    function playWithAudioContext(soundSrc) {
+      if (!audioContext) {
+        audioContext = initAudioContext();
+      }
+      
+      if (audioContext) {
+        fetch(soundSrc)
+          .then(response => response.arrayBuffer())
+          .then(arrayBuffer => audioContext.decodeAudioData(arrayBuffer))
+          .then(audioBuffer => {
+            const source = audioContext.createBufferSource();
+            source.buffer = audioBuffer;
+            source.connect(audioContext.destination);
+            source.start(0);
+          })
+          .catch(err => {
+            console.log("Falha ao ativar áudio:", err);
+          });
+      }
+    }
+
+    // Função para atualizar mídia
+    function updateMedia(url, type, caption) {
+      const container = document.getElementById("mediaContainer");
+      container.innerHTML = '';
+      
+      if (type === "image") {
+        const img = document.createElement("img");
+        img.src = url;
+        img.alt = caption || "Imagem em destaque";
+        img.onerror = function() {
+          this.onerror = null;
+          this.src = '';
+          this.alt = 'Imagem não disponível';
+        };
+        container.appendChild(img);
+      } else if (type === "video") {
+        const video = document.createElement("video");
+        video.src = url;
+        video.controls = true;
+        video.autoplay = true;
+        video.muted = true; // Inicialmente mudo para evitar problemas de reprodução automática
+        video.loop = true;
+        video.onerror = function() {
+          this.onerror = null;
+          this.src = '';
+          container.innerHTML = '<p>Vídeo não disponível</p>';
+        };
+        container.appendChild(video);
+        
+        // Tentar ativar o som após o usuário interagir com a página
+        document.addEventListener('click', function unmuteVideo() {
+          video.muted = false;
+          document.removeEventListener('click', unmuteVideo);
+        }, { once: true });
+      }
+      
+      if (caption) {
+        const captionElement = document.createElement("p");
+        captionElement.className = "mt-2 text-2xl";
+        captionElement.textContent = caption;
+        container.appendChild(captionElement);
+      }
+    }
+
+    // Função para atualizar agenda
+    function updateAgenda(events) {
+      const container = document.getElementById("agendaContainer");
+      container.innerHTML = '';
+      
+      if (!events || events.length === 0) {
+        container.innerHTML = '<p>Nenhum compromisso agendado para hoje</p>';
+        return;
+      }
+      
+      events.forEach(event => {
+        const item = document.createElement("div");
+        item.className = "agenda-item";
+        item.innerHTML = `
+          <div class="text-xl font-bold">${event.time}</div>
+          <div class="text-3xl">${event.title}</div>
+          <div class="text-xl">${event.description || ''}</div>
+        `;
+        container.appendChild(item);
+      });
+    }
+
+    // Função para atualizar QR code
+    function updateQRCode(url, text) {
+      try {
+        const container = document.getElementById("qrcodeCanvas");
+        container.innerHTML = '';
+        
+        QRCode.toCanvas(container, url || window.location.origin, {
+          width: 300,
+          margin: 1,
+          color: {
+            dark: '#FFF',
+            light: '#000'
+          }
+        }).catch(err => {
+          console.error("Erro ao gerar QR code:", err);
+          container.innerHTML = '<p>Erro ao gerar QR code</p>';
+        });
+        
+        document.getElementById("qrcodeText").textContent = text || "Escaneie o código QR";
+      } catch (error) {
+        console.error("Erro ao processar QR code:", error);
+      }
+    }
+
+    // Função para atualizar enquete
+    function updatePoll(question, options) {
+      const container = document.getElementById("pollContainer");
+      container.innerHTML = '';
+      
+      const titleElement = document.createElement("h3");
+      titleElement.className = "text-3xl mb-4";
+      titleElement.textContent = question;
+      container.appendChild(titleElement);
+      
+      // Verificar se options existe e é um array
+      if (!Array.isArray(options) || options.length === 0) {
+        container.innerHTML += '<p>Nenhuma opção disponível</p>';
+        return;
+      }
+      
+      const total = options.reduce((acc, option) => acc + (option.votes || 0), 0);
+      
+      options.forEach(option => {
+        const votes = option.votes || 0;
+        const percentage = total > 0 ? Math.round((votes / total) * 100) : 0;
+        
+        const optionElement = document.createElement("div");
+        optionElement.className = "poll-option";
+        optionElement.innerHTML = `
+          <div class="text-left text-2xl">${option.text}</div>
+          <div class="text-right text-2xl">${percentage}%</div>
+        `;
+        
+        const barContainer = document.createElement("div");
+        barContainer.className = "w-full bg-gray-800 h-6 rounded mt-1";
+        
+        const bar = document.createElement("div");
+        bar.className = "poll-bar";
+        bar.style.width = `${percentage}%`;
+        
+        barContainer.appendChild(bar);
+        container.appendChild(optionElement);
+        container.appendChild(barContainer);
+      });
+    }
+
+    // Função para agendar notificações
+    function scheduleNotification(data) {
+      try {
+        const now = new Date();
+        const scheduledTime = new Date(data.scheduledTime);
+        
+        // Verificar se a data é válida
+        if (isNaN(scheduledTime.getTime())) {
+          console.error("Data de agendamento inválida:", data.scheduledTime);
+          return;
+        }
+        
+        const timeUntilNotification = scheduledTime - now;
+        
+        if (timeUntilNotification <= 0) return;
+        
+        // Limitar a no máximo 24 horas (86400000 ms)
+        const maxDelay = 86400000;
+        const delay = Math.min(timeUntilNotification, maxDelay);
+        
+        const notification = {
+          id: Date.now() + Math.random().toString(36).substr(2, 9),
+          ...data
+        };
+        
+        scheduledNotifications.push(notification);
+        
+        setTimeout(() => {
+          showAlert(notification.message, notification.soundType || "notification", notification.duration || 10000);
+          scheduledNotifications = scheduledNotifications.filter(n => n.id !== notification.id);
+        }, delay);
+      } catch (error) {
+        console.error("Erro ao agendar notificação:", error);
+      }
+    }
+
+    // Clock
+    setInterval(() => {
+      const now = new Date();
+      document.getElementById("clock").innerText = now.toLocaleTimeString("pt-BR");
+    }, 1000);
+
+    // Função para atualizar o clima
+    function atualizarClima() {
+      try {
+        // Coordenadas genéricas para Brasil central
+        fetch("https://api.open-meteo.com/v1/forecast?latitude=-15.7801&longitude=-47.9292&current=temperature_2m", { 
+          signal: AbortSignal.timeout(10000) // Timeout de 10 segundos
+        })
+          .then(res => {
+            if (!res.ok) throw new Error("Resposta da API não foi OK");
+            return res.json();
+          })
+          .then(data => {
+            if (data && data.current && data.current.temperature_2m !== undefined) {
+              document.getElementById("weather").innerText = "Temperatura: " + data.current.temperature_2m + "°C";
+            } else {
+              document.getElementById("weather").innerText = "Temperatura: indisponível";
+            }
+          })
+          .catch(error => {
+            console.error("Erro ao obter dados meteorológicos:", error);
+            document.getElementById("weather").innerText = "Temperatura: indisponível";
+          });
+      } catch (error) {
+        console.error("Erro na função de clima:", error);
+        document.getElementById("weather").innerText = "Temperatura: indisponível";
+      }
+    }
+
+    // Atualiza imediatamente na carga da página
+    atualizarClima();
+    
+    // Atualiza a cada hora (3600000 ms)
+    setInterval(atualizarClima, 3600000);
+
+    // Inicia com valores padrão
+    updateQRCode(window.location.origin, "Escaneie para mais informações");
+    updatePoll("Qual recurso você mais gosta?", [
+      { text: "Clima em tempo real", votes: 5 },
+      { text: "Agenda do dia", votes: 8 },
+      { text: "Notificações de alerta", votes: 3 }
+    ]);
+    updateAgenda([
+      { time: "09:00", title: "Reunião da Equipe", description: "Sala de conferências" },
+      { time: "13:00", title: "Almoço", description: "Intervalo" },
+      { time: "15:30", title: "Apresentação", description: "Auditório principal" }
+    ]);
+
+    // Carrossel
+    let current = 0;
+    const slides = document.querySelectorAll(".slide");
+    let carouselInterval = setInterval(() => {
+      slides[current].classList.remove("active");
+      current = (current + 1) % slides.length;
+      slides[current].classList.add("active");
+    }, 10000);
+    
+    // Adicionar tratamento de erros global
+    window.addEventListener('error', function(e) {
+      console.error('Erro global capturado:', e.error || e.message);
+      return true; // Prevent default error handling
+    });
+  </script>
+</body>
+</html> 

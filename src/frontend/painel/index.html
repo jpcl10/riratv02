@@ -1,0 +1,901 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Painel de Controle</title>
+  <!-- Configurações de segurança -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.socket.io https://cdn.tailwindcss.com 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; connect-src 'self' ws: wss: http: https:;">
+  <meta http-equiv="X-Content-Type-Options" content="nosniff">
+  <meta http-equiv="X-Frame-Options" content="SAMEORIGIN">
+  <meta http-equiv="Permissions-Policy" content="camera=(), microphone=(), geolocation=()">
+  <script src="https://cdn.socket.io/4.6.1/socket.io.min.js" integrity="sha384-uXjRYVAKnf0Gw1OL4Dd8h99kbal1soQkh+TMOVQovesDJf7sByFGaXwyuHSP2JY" crossorigin="anonymous"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-900 text-white p-5 font-sans">
+  <h1 class="text-3xl mb-4">Painel do Consultório</h1>
+  
+  <!-- Navegação entre abas -->
+  <div class="mb-6">
+    <div class="flex flex-wrap border-b border-gray-600">
+      <button onclick="showTab('alertasTab')" id="alertasTabBtn" class="px-4 py-2 text-blue-400 focus:outline-none tab-active">Alertas</button>
+      <button onclick="showTab('tarefasTab')" id="tarefasTabBtn" class="px-4 py-2 text-gray-400 focus:outline-none">Tarefas</button>
+      <button onclick="showTab('midiaTab')" id="midiaTabBtn" class="px-4 py-2 text-gray-400 focus:outline-none">Mídias</button>
+      <button onclick="showTab('agendaTab')" id="agendaTabBtn" class="px-4 py-2 text-gray-400 focus:outline-none">Agenda</button>
+      <button onclick="showTab('qrcodeTab')" id="qrcodeTabBtn" class="px-4 py-2 text-gray-400 focus:outline-none">QR Code</button>
+      <button onclick="showTab('enqueteTab')" id="enqueteTabBtn" class="px-4 py-2 text-gray-400 focus:outline-none">Enquete</button>
+    </div>
+  </div>
+  
+  <div class="tab-content">
+    <!-- Aba de Alertas -->
+    <div id="alertasTab" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <!-- Seção de Alertas -->
+      <div class="bg-gray-800 p-4 rounded-lg">
+        <h2 class="text-xl mb-3 border-b pb-2">Enviar Alerta</h2>
+        
+        <label class="block mb-2">Mensagem:</label>
+        <input id="message" type="text" class="w-full p-2 text-black mb-4"/>
+        
+        <label class="block mb-2">Tipo de Som:</label>
+        <select id="soundType" class="w-full text-black p-2 mb-4">
+          <option value="default">Padrão</option>
+          <option value="emergency">Emergência</option>
+          <option value="notification">Notificação</option>
+          <option value="reminder">Lembrete</option>
+        </select>
+        
+        <label class="block mb-2">Duração (ms):</label>
+        <input id="alertDuration" type="number" value="10000" class="w-full p-2 text-black mb-4"/>
+
+        <label class="block mb-2">Enviar para:</label>
+        <select id="target" class="w-full text-black p-2 mb-4">
+          <option value="admin">TV Admin</option>
+          <option value="recepcao">TV Recepção</option>
+          <option value="all">Todas</option>
+        </select>
+
+        <button onclick="enviarAlerta()" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 w-full rounded transition-colors">
+          Enviar Alerta
+        </button>
+        
+        <div id="alertFeedback" class="hidden mt-3 p-2 text-center"></div>
+      </div>
+      
+      <!-- Seção de Notificações Programadas -->
+      <div class="bg-gray-800 p-4 rounded-lg">
+        <h2 class="text-xl mb-3 border-b pb-2">Programar Notificação</h2>
+        
+        <label class="block mb-2">Mensagem:</label>
+        <input id="scheduledMessage" type="text" class="w-full p-2 text-black mb-4"/>
+        
+        <label class="block mb-2">Tipo de Som:</label>
+        <select id="scheduledSoundType" class="w-full text-black p-2 mb-4">
+          <option value="default">Padrão</option>
+          <option value="emergency">Emergência</option>
+          <option value="notification">Notificação</option>
+          <option value="reminder">Lembrete</option>
+        </select>
+        
+        <label class="block mb-2">Data e Hora:</label>
+        <input id="scheduledDateTime" type="datetime-local" class="w-full p-2 text-black mb-4"/>
+        
+        <label class="block mb-2">Duração (ms):</label>
+        <input id="scheduledDuration" type="number" value="10000" class="w-full p-2 text-black mb-4"/>
+
+        <button onclick="agendarNotificacao()" class="bg-purple-600 hover:bg-purple-700 px-4 py-2 w-full rounded transition-colors">
+          Agendar Notificação
+        </button>
+        
+        <div id="scheduledFeedback" class="hidden mt-3 p-2 text-center"></div>
+      </div>
+    </div>
+    
+    <!-- Aba de Tarefas -->
+    <div id="tarefasTab" class="grid grid-cols-1 md:grid-cols-1 gap-6 hidden">
+      <!-- Seção de Tarefas -->
+      <div class="bg-gray-800 p-4 rounded-lg">
+        <h2 class="text-xl mb-3 border-b pb-2">Gerenciar Tarefas</h2>
+        
+        <div class="mb-3">
+          <label class="block mb-2">Nova tarefa:</label>
+          <div class="flex">
+            <input id="newTask" type="text" class="flex-1 p-2 text-black"/>
+            <button onclick="adicionarTarefa()" class="bg-green-600 hover:bg-green-700 px-3 ml-2 rounded transition-colors">
+              Adicionar
+            </button>
+          </div>
+        </div>
+        
+        <div class="mb-3">
+          <label class="block mb-2">Lista de tarefas:</label>
+          <ul id="taskList" class="bg-gray-700 rounded p-2 max-h-60 overflow-y-auto">
+            <li class="text-gray-400 italic">Nenhuma tarefa adicionada</li>
+          </ul>
+        </div>
+        
+        <button onclick="enviarTarefas()" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 w-full rounded transition-colors">
+          Atualizar Tarefas na TV
+        </button>
+        
+        <div id="taskFeedback" class="hidden mt-3 p-2 text-center"></div>
+      </div>
+    </div>
+    
+    <!-- Aba de Mídias -->
+    <div id="midiaTab" class="grid grid-cols-1 md:grid-cols-1 gap-6 hidden">
+      <div class="bg-gray-800 p-4 rounded-lg">
+        <h2 class="text-xl mb-3 border-b pb-2">Enviar Mídia</h2>
+        
+        <label class="block mb-2">Tipo de Mídia:</label>
+        <select id="mediaType" class="w-full text-black p-2 mb-4">
+          <option value="image">Imagem</option>
+          <option value="video">Vídeo</option>
+        </select>
+        
+        <label class="block mb-2">URL da Mídia:</label>
+        <input id="mediaUrl" type="text" class="w-full p-2 text-black mb-4" placeholder="https://exemplo.com/imagem.jpg"/>
+        
+        <label class="block mb-2">Legenda:</label>
+        <input id="mediaCaption" type="text" class="w-full p-2 text-black mb-4"/>
+        
+        <button onclick="enviarMidia()" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 w-full rounded transition-colors">
+          Enviar Mídia para TV
+        </button>
+        
+        <div id="mediaFeedback" class="hidden mt-3 p-2 text-center"></div>
+      </div>
+    </div>
+    
+    <!-- Aba de Agenda -->
+    <div id="agendaTab" class="grid grid-cols-1 md:grid-cols-1 gap-6 hidden">
+      <div class="bg-gray-800 p-4 rounded-lg">
+        <h2 class="text-xl mb-3 border-b pb-2">Gerenciar Agenda</h2>
+        
+        <div id="agenda-items" class="mb-4">
+          <!-- Os itens da agenda serão adicionados aqui -->
+          <p class="text-gray-400 italic mb-2">Nenhum evento adicionado</p>
+        </div>
+        
+        <div class="border-t border-gray-600 pt-4">
+          <h3 class="text-lg mb-3">Adicionar Evento</h3>
+          
+          <label class="block mb-2">Horário:</label>
+          <input id="eventTime" type="time" class="w-full p-2 text-black mb-4"/>
+          
+          <label class="block mb-2">Título:</label>
+          <input id="eventTitle" type="text" class="w-full p-2 text-black mb-4"/>
+          
+          <label class="block mb-2">Descrição:</label>
+          <input id="eventDescription" type="text" class="w-full p-2 text-black mb-4"/>
+          
+          <button onclick="adicionarEvento()" class="bg-green-600 hover:bg-green-700 px-4 py-2 w-full rounded transition-colors mb-4">
+            Adicionar Evento
+          </button>
+          
+          <button onclick="enviarAgenda()" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 w-full rounded transition-colors">
+            Atualizar Agenda na TV
+          </button>
+        </div>
+        
+        <div id="agendaFeedback" class="hidden mt-3 p-2 text-center"></div>
+      </div>
+    </div>
+    
+    <!-- Aba de QR Code -->
+    <div id="qrcodeTab" class="grid grid-cols-1 md:grid-cols-1 gap-6 hidden">
+      <div class="bg-gray-800 p-4 rounded-lg">
+        <h2 class="text-xl mb-3 border-b pb-2">Gerar QR Code</h2>
+        
+        <label class="block mb-2">URL para o QR Code:</label>
+        <input id="qrcodeUrl" type="text" class="w-full p-2 text-black mb-4" placeholder="https://exemplo.com"/>
+        
+        <label class="block mb-2">Texto Descritivo:</label>
+        <input id="qrcodeText" type="text" class="w-full p-2 text-black mb-4" placeholder="Escaneie para mais informações"/>
+        
+        <button onclick="enviarQRCode()" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 w-full rounded transition-colors">
+          Enviar QR Code para TV
+        </button>
+        
+        <div id="qrcodeFeedback" class="hidden mt-3 p-2 text-center"></div>
+      </div>
+    </div>
+    
+    <!-- Aba de Enquete -->
+    <div id="enqueteTab" class="grid grid-cols-1 md:grid-cols-1 gap-6 hidden">
+      <div class="bg-gray-800 p-4 rounded-lg">
+        <h2 class="text-xl mb-3 border-b pb-2">Criar Enquete</h2>
+        
+        <label class="block mb-2">Pergunta:</label>
+        <input id="pollQuestion" type="text" class="w-full p-2 text-black mb-4"/>
+        
+        <div id="poll-options" class="mb-4">
+          <label class="block mb-2">Opções:</label>
+          
+          <div class="poll-option-item flex mb-2">
+            <input type="text" placeholder="Opção" class="flex-1 p-2 text-black poll-option-text"/>
+            <input type="number" placeholder="Votos" class="w-20 p-2 text-black ml-2 poll-option-votes"/>
+            <button onclick="removerOpcao(this)" class="bg-red-600 px-3 ml-2 rounded">
+              &times;
+            </button>
+          </div>
+          
+          <div class="poll-option-item flex mb-2">
+            <input type="text" placeholder="Opção" class="flex-1 p-2 text-black poll-option-text"/>
+            <input type="number" placeholder="Votos" class="w-20 p-2 text-black ml-2 poll-option-votes"/>
+            <button onclick="removerOpcao(this)" class="bg-red-600 px-3 ml-2 rounded">
+              &times;
+            </button>
+          </div>
+        </div>
+        
+        <button onclick="adicionarOpcao()" class="bg-green-600 hover:bg-green-700 px-4 py-2 w-full rounded transition-colors mb-4">
+          Adicionar Opção
+        </button>
+        
+        <button onclick="enviarEnquete()" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 w-full rounded transition-colors">
+          Enviar Enquete para TV
+        </button>
+        
+        <div id="pollFeedback" class="hidden mt-3 p-2 text-center"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Configurações de segurança e validação
+    const appConfig = {
+      maxInputLength: 200,
+      maxMediaUrlLength: 1024,
+      mediaUrlPattern: /^https:\/\/[a-zA-Z0-9\-\.\/\_\?\=\&\%]+$/i,
+      validSoundTypes: ['default', 'emergency', 'notification', 'reminder'],
+      validTargets: ['admin', 'recepcao', 'all'],
+      maxTaskCount: 20,
+      maxEventCount: 10
+    };
+
+    // Detecta automaticamente o endereço do servidor com validação de segurança
+    const socketURL = (() => {
+      const hostname = window.location.hostname;
+      if (hostname === 'localhost' || hostname === '127.0.0.1') {
+        return 'http://localhost:3001';
+      } else {
+        // Garantir que estamos na mesma origem para segurança
+        return window.location.origin;
+      }
+    })();
+    
+    // Configurações seguras para o socket
+    const socketOptions = {
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
+      timeout: 20000,
+      transports: ['websocket', 'polling']
+    };
+    
+    let socket;
+    
+    try {
+      socket = io(socketURL, socketOptions);
+      
+      // Tratamento de erros de conexão
+      socket.on('connect_error', (err) => {
+        console.error("Erro de conexão:", err);
+        mostrarFeedback("alertFeedback", "Erro de conexão com o servidor", "error");
+      });
+      
+      socket.on('connect', () => {
+        console.log("Conectado ao socket.io");
+        socket.emit("register", { type: "panel", id: "consultorio-1" });
+      });
+      
+      socket.on("registered", (data) => {
+        console.log("Registro confirmado:", data);
+      });
+      
+      socket.on("message_sent", (response) => {
+        if (response.success) {
+          console.log("Mensagem enviada com sucesso:", response);
+        } else {
+          console.error("Erro ao enviar mensagem:", response.error);
+          mostrarFeedback("alertFeedback", "Erro ao enviar dados: " + (response.error || "Erro desconhecido"), "error");
+        }
+      });
+    } catch (e) {
+      console.error("Erro fatal na inicialização do socket:", e);
+      alert("Erro de conexão. Por favor, recarregue a página.");
+    }
+    
+    // Funções para manipulação de abas
+    function showTab(tabId) {
+      try {
+        // Validar tab ID para evitar manipulação
+        const validTabs = ['alertasTab', 'tarefasTab', 'midiaTab', 'agendaTab', 'qrcodeTab', 'enqueteTab'];
+        if (!validTabs.includes(tabId)) {
+          console.error("ID de aba inválido:", tabId);
+          return;
+        }
+        
+        // Ocultar todas as abas
+        document.querySelectorAll('.tab-content > div').forEach(tab => {
+          tab.classList.add('hidden');
+        });
+        
+        // Desativar todos os botões
+        document.querySelectorAll('[id$="TabBtn"]').forEach(btn => {
+          btn.classList.remove('text-blue-400');
+          btn.classList.add('text-gray-400');
+        });
+        
+        // Mostrar a aba selecionada
+        const selectedTab = document.getElementById(tabId);
+        if (selectedTab) {
+          selectedTab.classList.remove('hidden');
+        }
+        
+        // Ativar o botão correspondente
+        const selectedBtn = document.getElementById(tabId + 'Btn');
+        if (selectedBtn) {
+          selectedBtn.classList.remove('text-gray-400');
+          selectedBtn.classList.add('text-blue-400');
+        }
+      } catch (e) {
+        console.error("Erro ao mudar de aba:", e);
+      }
+    }
+    
+    // Lista de tarefas atual
+    const tarefas = [];
+    
+    // Função para atualizar a lista de tarefas na interface
+    function atualizarListaTarefas() {
+      try {
+        const taskList = document.getElementById("taskList");
+        
+        if (!taskList) {
+          console.error("Elemento taskList não encontrado");
+          return;
+        }
+        
+        if (tarefas.length === 0) {
+          taskList.innerHTML = '<li class="text-gray-400 italic">Nenhuma tarefa adicionada</li>';
+          return;
+        }
+        
+        // Renderizar tarefas com sanitização de HTML
+        taskList.innerHTML = tarefas.map((tarefa, index) => 
+          `<li class="py-1 px-2 flex justify-between items-center border-b border-gray-600">
+            <span>${sanitizeInput(tarefa)}</span>
+            <button onclick="removerTarefa(${index})" class="text-red-500 hover:text-red-700">
+              &times;
+            </button>
+          </li>`
+        ).join('');
+      } catch (e) {
+        console.error("Erro ao atualizar lista de tarefas:", e);
+      }
+    }
+    
+    // Adicionar nova tarefa
+    function adicionarTarefa() {
+      try {
+        const newTaskInput = document.getElementById("newTask");
+        if (!newTaskInput) return;
+        
+        const tarefa = newTaskInput.value.trim();
+        
+        if (tarefa) {
+          // Verificar limite de tarefas
+          if (tarefas.length >= appConfig.maxTaskCount) {
+            mostrarFeedback("taskFeedback", `Limite de ${appConfig.maxTaskCount} tarefas atingido`, "error");
+            return;
+          }
+          
+          // Limitar tamanho da tarefa
+          tarefas.push(sanitizeInput(tarefa, 100));
+          newTaskInput.value = '';
+          atualizarListaTarefas();
+        }
+      } catch (e) {
+        console.error("Erro ao adicionar tarefa:", e);
+      }
+    }
+    
+    // Remover tarefa
+    function removerTarefa(index) {
+      try {
+        if (index >= 0 && index < tarefas.length) {
+          tarefas.splice(index, 1);
+          atualizarListaTarefas();
+        }
+      } catch (e) {
+        console.error("Erro ao remover tarefa:", e);
+      }
+    }
+    
+    // Enviar tarefas para TVs
+    function enviarTarefas() {
+      try {
+        if (tarefas.length === 0) {
+          mostrarFeedback("taskFeedback", "Adicione pelo menos uma tarefa", "error");
+          return;
+        }
+        
+        const payload = {
+          type: "tasks",
+          tasks: tarefas.map(t => sanitizeInput(t, 100)) // Sanitizar novamente para garantir
+        };
+        
+        const target = validarTarget(document.getElementById("target").value);
+        socket.emit("send_message", { target, payload });
+        
+        // Feedback visual
+        mostrarFeedback("taskFeedback", "Tarefas atualizadas na TV!", "success");
+      } catch (e) {
+        console.error("Erro ao enviar tarefas:", e);
+        mostrarFeedback("taskFeedback", "Erro ao enviar tarefas", "error");
+      }
+    }
+    
+    // Lista de eventos da agenda
+    const eventos = [];
+    
+    // Função para atualizar a lista de eventos na interface
+    function atualizarListaEventos() {
+      try {
+        const container = document.getElementById("agenda-items");
+        if (!container) return;
+        
+        if (eventos.length === 0) {
+          container.innerHTML = '<p class="text-gray-400 italic mb-2">Nenhum evento adicionado</p>';
+          return;
+        }
+        
+        // Ordena os eventos por horário
+        eventos.sort((a, b) => {
+          return a.time.localeCompare(b.time);
+        });
+        
+        // Renderizar eventos com sanitização de HTML
+        container.innerHTML = eventos.map((evento, index) => `
+          <div class="py-2 px-3 mb-2 bg-gray-700 rounded flex justify-between items-center">
+            <div>
+              <span class="font-bold">${sanitizeInput(evento.time, 10)}</span> - 
+              <span>${sanitizeInput(evento.title, 50)}</span>
+              <p class="text-sm text-gray-300">${sanitizeInput(evento.description || '', 100)}</p>
+            </div>
+            <button onclick="removerEvento(${index})" class="text-red-500 hover:text-red-700">
+              &times;
+            </button>
+          </div>
+        `).join('');
+      } catch (e) {
+        console.error("Erro ao atualizar lista de eventos:", e);
+      }
+    }
+    
+    // Adicionar novo evento
+    function adicionarEvento() {
+      try {
+        const time = document.getElementById("eventTime").value;
+        const title = document.getElementById("eventTitle").value.trim();
+        const description = document.getElementById("eventDescription").value.trim();
+        
+        if (time && title) {
+          // Verificar limite de eventos
+          if (eventos.length >= appConfig.maxEventCount) {
+            mostrarFeedback("agendaFeedback", `Limite de ${appConfig.maxEventCount} eventos atingido`, "error");
+            return;
+          }
+          
+          eventos.push({ 
+            time: sanitizeInput(time, 10), 
+            title: sanitizeInput(title, 50), 
+            description: sanitizeInput(description, 100) 
+          });
+          
+          // Limpar campos
+          document.getElementById("eventTime").value = '';
+          document.getElementById("eventTitle").value = '';
+          document.getElementById("eventDescription").value = '';
+          
+          atualizarListaEventos();
+        } else {
+          mostrarFeedback("agendaFeedback", "Horário e título são obrigatórios!", "error");
+        }
+      } catch (e) {
+        console.error("Erro ao adicionar evento:", e);
+      }
+    }
+    
+    // Remover evento
+    function removerEvento(index) {
+      try {
+        if (index >= 0 && index < eventos.length) {
+          eventos.splice(index, 1);
+          atualizarListaEventos();
+        }
+      } catch (e) {
+        console.error("Erro ao remover evento:", e);
+      }
+    }
+    
+    // Enviar agenda para TVs
+    function enviarAgenda() {
+      try {
+        if (eventos.length === 0) {
+          mostrarFeedback("agendaFeedback", "Adicione pelo menos um evento", "error");
+          return;
+        }
+        
+        const payload = {
+          type: "agenda",
+          events: eventos.map(evt => ({
+            time: sanitizeInput(evt.time, 10),
+            title: sanitizeInput(evt.title, 50),
+            description: sanitizeInput(evt.description || '', 100)
+          }))
+        };
+        
+        const target = validarTarget(document.getElementById("target").value);
+        socket.emit("send_message", { target, payload });
+        
+        mostrarFeedback("agendaFeedback", "Agenda atualizada na TV!", "success");
+      } catch (e) {
+        console.error("Erro ao enviar agenda:", e);
+        mostrarFeedback("agendaFeedback", "Erro ao enviar agenda", "error");
+      }
+    }
+    
+    // Funções para enquete
+    function adicionarOpcao() {
+      try {
+        const container = document.getElementById("poll-options");
+        if (!container) return;
+        
+        // Limitar número máximo de opções
+        if (container.querySelectorAll('.poll-option-item').length >= 10) {
+          mostrarFeedback("pollFeedback", "Limite máximo de opções atingido (10)", "error");
+          return;
+        }
+        
+        const newOption = document.createElement("div");
+        newOption.className = "poll-option-item flex mb-2";
+        newOption.innerHTML = `
+          <input type="text" placeholder="Opção" class="flex-1 p-2 text-black poll-option-text"/>
+          <input type="number" placeholder="Votos" class="w-20 p-2 text-black ml-2 poll-option-votes"/>
+          <button onclick="removerOpcao(this)" class="bg-red-600 px-3 ml-2 rounded">
+            &times;
+          </button>
+        `;
+        container.appendChild(newOption);
+      } catch (e) {
+        console.error("Erro ao adicionar opção:", e);
+      }
+    }
+    
+    function removerOpcao(button) {
+      try {
+        const container = document.getElementById("poll-options");
+        if (!container) return;
+        
+        const optionItem = button.parentElement;
+        
+        // Não remover se for a única opção
+        if (container.querySelectorAll('.poll-option-item').length > 1) {
+          container.removeChild(optionItem);
+        }
+      } catch (e) {
+        console.error("Erro ao remover opção:", e);
+      }
+    }
+    
+    function enviarEnquete() {
+      try {
+        const question = document.getElementById("pollQuestion").value.trim();
+        if (!question) {
+          mostrarFeedback("pollFeedback", "Digite uma pergunta para a enquete!", "error");
+          return;
+        }
+        
+        const options = [];
+        const optionItems = document.querySelectorAll('.poll-option-item');
+        
+        optionItems.forEach(item => {
+          const text = item.querySelector('.poll-option-text').value.trim();
+          const votesInput = item.querySelector('.poll-option-votes').value;
+          
+          // Validar votos como número positivo
+          let votes = 0;
+          if (votesInput) {
+            votes = parseInt(votesInput);
+            if (isNaN(votes) || votes < 0) votes = 0;
+            if (votes > 999999) votes = 999999;
+          }
+          
+          if (text) {
+            options.push({ 
+              text: sanitizeInput(text, 50), 
+              votes: votes 
+            });
+          }
+        });
+        
+        if (options.length < 2) {
+          mostrarFeedback("pollFeedback", "Adicione pelo menos duas opções!", "error");
+          return;
+        }
+        
+        const payload = {
+          type: "poll",
+          question: sanitizeInput(question, 100),
+          options: options
+        };
+        
+        const target = validarTarget(document.getElementById("target").value);
+        socket.emit("send_message", { target, payload });
+        
+        mostrarFeedback("pollFeedback", "Enquete enviada para a TV!", "success");
+      } catch (e) {
+        console.error("Erro ao enviar enquete:", e);
+        mostrarFeedback("pollFeedback", "Erro ao enviar enquete", "error");
+      }
+    }
+    
+    // Função para enviar QR Code
+    function enviarQRCode() {
+      try {
+        const url = document.getElementById("qrcodeUrl").value.trim();
+        const text = document.getElementById("qrcodeText").value.trim();
+        
+        if (!url) {
+          mostrarFeedback("qrcodeFeedback", "Digite uma URL para o QR Code!", "error");
+          return;
+        }
+        
+        // Validar formato da URL
+        if (!validarURL(url)) {
+          mostrarFeedback("qrcodeFeedback", "URL inválida ou insegura. Use https://", "error");
+          return;
+        }
+        
+        const payload = {
+          type: "qrcode",
+          url: sanitizeUrl(url),
+          text: sanitizeInput(text, 100)
+        };
+        
+        const target = validarTarget(document.getElementById("target").value);
+        socket.emit("send_message", { target, payload });
+        
+        mostrarFeedback("qrcodeFeedback", "QR Code enviado para a TV!", "success");
+      } catch (e) {
+        console.error("Erro ao enviar QR code:", e);
+        mostrarFeedback("qrcodeFeedback", "Erro ao enviar QR Code", "error");
+      }
+    }
+    
+    // Função para enviar mídia
+    function enviarMidia() {
+      try {
+        const mediaType = document.getElementById("mediaType").value;
+        const mediaUrl = document.getElementById("mediaUrl").value.trim();
+        const mediaCaption = document.getElementById("mediaCaption").value.trim();
+        
+        if (!mediaUrl) {
+          mostrarFeedback("mediaFeedback", "Digite uma URL para a mídia!", "error");
+          return;
+        }
+        
+        // Validar formato da URL
+        if (!validarURL(mediaUrl)) {
+          mostrarFeedback("mediaFeedback", "URL inválida ou insegura. Use https://", "error");
+          return;
+        }
+        
+        const payload = {
+          type: "media",
+          mediaType: mediaType === 'image' ? 'image' : 'video',
+          mediaUrl: sanitizeUrl(mediaUrl),
+          mediaCaption: sanitizeInput(mediaCaption, 100)
+        };
+        
+        const target = validarTarget(document.getElementById("target").value);
+        socket.emit("send_message", { target, payload });
+        
+        mostrarFeedback("mediaFeedback", "Mídia enviada para a TV!", "success");
+      } catch (e) {
+        console.error("Erro ao enviar mídia:", e);
+        mostrarFeedback("mediaFeedback", "Erro ao enviar mídia", "error");
+      }
+    }
+    
+    // Enviar alerta
+    function enviarAlerta() {
+      try {
+        const mensagem = document.getElementById("message").value.trim();
+        const soundType = document.getElementById("soundType").value;
+        const durationInput = document.getElementById("alertDuration").value;
+        
+        if (!mensagem) {
+          mostrarFeedback("alertFeedback", "Digite uma mensagem para o alerta!", "error");
+          return;
+        }
+        
+        // Validar duração
+        let duration = parseInt(durationInput);
+        if (isNaN(duration) || duration < 1000) duration = 10000;
+        if (duration > 60000) duration = 60000;
+        
+        // Validar tipo de som
+        if (!appConfig.validSoundTypes.includes(soundType)) {
+          mostrarFeedback("alertFeedback", "Tipo de som inválido", "error");
+          return;
+        }
+        
+        const payload = {
+          type: "alert",
+          message: sanitizeInput(mensagem, 200),
+          soundType: soundType,
+          duration: duration
+        };
+        
+        const target = validarTarget(document.getElementById("target").value);
+        socket.emit("send_message", { target, payload });
+        
+        mostrarFeedback("alertFeedback", "Alerta enviado com sucesso!", "success");
+        
+        // Limpar campo de mensagem após envio
+        document.getElementById("message").value = "";
+      } catch (e) {
+        console.error("Erro ao enviar alerta:", e);
+        mostrarFeedback("alertFeedback", "Erro ao enviar alerta", "error");
+      }
+    }
+    
+    // Agendar notificação
+    function agendarNotificacao() {
+      try {
+        const mensagem = document.getElementById("scheduledMessage").value.trim();
+        const soundType = document.getElementById("scheduledSoundType").value;
+        const dateTime = document.getElementById("scheduledDateTime").value;
+        const durationInput = document.getElementById("scheduledDuration").value;
+        
+        if (!mensagem) {
+          mostrarFeedback("scheduledFeedback", "Digite uma mensagem para a notificação!", "error");
+          return;
+        }
+        
+        if (!dateTime) {
+          mostrarFeedback("scheduledFeedback", "Selecione a data e hora!", "error");
+          return;
+        }
+        
+        // Validar se data/hora está no futuro
+        const scheduledTime = new Date(dateTime);
+        const now = new Date();
+        if (scheduledTime <= now) {
+          mostrarFeedback("scheduledFeedback", "A data e hora devem estar no futuro!", "error");
+          return;
+        }
+        
+        // Validar duração
+        let duration = parseInt(durationInput);
+        if (isNaN(duration) || duration < 1000) duration = 10000;
+        if (duration > 60000) duration = 60000;
+        
+        const payload = {
+          type: "scheduledNotification",
+          message: sanitizeInput(mensagem, 200),
+          soundType: appConfig.validSoundTypes.includes(soundType) ? soundType : 'default',
+          scheduledTime: dateTime,
+          duration: duration
+        };
+        
+        const target = validarTarget(document.getElementById("target").value);
+        socket.emit("send_message", { target, payload });
+        
+        mostrarFeedback("scheduledFeedback", "Notificação agendada com sucesso!", "success");
+        
+        // Limpar campos
+        document.getElementById("scheduledMessage").value = "";
+        document.getElementById("scheduledDateTime").value = "";
+      } catch (e) {
+        console.error("Erro ao agendar notificação:", e);
+        mostrarFeedback("scheduledFeedback", "Erro ao agendar notificação", "error");
+      }
+    }
+    
+    // Funções de validação de segurança
+    
+    // Sanitização de input para evitar XSS
+    function sanitizeInput(input, maxLength = 100) {
+      if (typeof input !== 'string') return '';
+      
+      // Limitar tamanho
+      input = input.substring(0, maxLength);
+      
+      // Remover tags HTML e scripts
+      return input
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;')
+        .replace(/`/g, '&#96;');
+    }
+    
+    // Validar URL (apenas HTTPS)
+    function validarURL(url) {
+      return typeof url === 'string' && 
+             url.length <= appConfig.maxMediaUrlLength && 
+             url.startsWith('https://') &&
+             !/[<>'"`]/.test(url); // Sem caracteres perigosos
+    }
+    
+    // Sanitizar URL
+    function sanitizeUrl(url) {
+      if (!validarURL(url)) return '';
+      return url.substring(0, appConfig.maxMediaUrlLength);
+    }
+    
+    // Validar target
+    function validarTarget(target) {
+      return appConfig.validTargets.includes(target) ? target : 'admin';
+    }
+    
+    // Função genérica para mostrar feedback
+    function mostrarFeedback(elementId, mensagem, tipo) {
+      try {
+        const feedback = document.getElementById(elementId);
+        if (!feedback) return;
+        
+        feedback.innerText = sanitizeInput(mensagem, 200);
+        
+        if (tipo === "success") {
+          feedback.className = "mt-3 p-2 text-center bg-green-700 rounded";
+        } else {
+          feedback.className = "mt-3 p-2 text-center bg-red-700 rounded";
+        }
+        
+        // Auto-esconder após um tempo
+        setTimeout(() => {
+          if (feedback) {
+            feedback.className = "hidden mt-3 p-2 text-center";
+          }
+        }, 3000);
+      } catch (e) {
+        console.error("Erro ao exibir feedback:", e);
+      }
+    }
+    
+    // Event listeners
+    document.addEventListener('DOMContentLoaded', function() {
+      try {
+        // Adicionar event listeners para tecla Enter
+        const newTaskInput = document.getElementById("newTask");
+        if (newTaskInput) {
+          newTaskInput.addEventListener("keyup", function(event) {
+            if (event.key === "Enter") {
+              adicionarTarefa();
+            }
+          });
+        }
+        
+        const messageInput = document.getElementById("message");
+        if (messageInput) {
+          messageInput.addEventListener("keyup", function(event) {
+            if (event.key === "Enter") {
+              enviarAlerta();
+            }
+          });
+        }
+        
+        // Inicialização
+        atualizarListaTarefas();
+        atualizarListaEventos();
+      } catch (e) {
+        console.error("Erro na inicialização:", e);
+      }
+    });
+  </script>
+</body>
+</html> 
